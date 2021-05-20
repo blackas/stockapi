@@ -164,7 +164,7 @@ class DartList(Resource):
             if code == 'all':
                 result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication"))
             else:
-                result_list = list(mongodb.find_items({"corp_cls":corpcls, "stock_code":code}, DBName, "dart_publication"))
+                result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication"))
         else:
             return {}, 404
         return { "count": len(result_list), "dart_list": result_list }, 200
