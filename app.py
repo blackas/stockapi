@@ -264,26 +264,39 @@ class GetKakaoAccessToken(Resource):
 
         if kakaocode=="":
             return {"status":"Fail"}, 500
-        print(kakaocode)
-        host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=http://localhost:3000/component/Kakao/GetAccessToken&code=" + kakaocode
+
+        host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=http://localhost:3000&code=" + kakaocode
+        print(host)
+
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8'}
         res = requests.post(host, headers=headers)
         jObject = json.loads(res.text)
-    
+        
         if "error" in jObject:
             return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 200
+
         userinfo={}
-        userinfo["userid"] = "nwkim"
-        userinfo["userno"] = "1"
         userinfo["kakao_access_token"] = jObject["access_token"]
         userinfo["kakao_expires_in"] = jObject["expires_in"]
         userinfo["kakao_refresh_token"] = jObject["refresh_token"]
         userinfo["kakao_refresh_token_expires_in"] = jObject["refresh_token_expires_in"]
-        if mongodb.find_items({"userid":"nwkim"}, DBName, "userinfo").count() == 0:
+
+        host = "https://kapi.kakao.com/v2/user/me"
+        headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8','Authorization': 'Bearer {'+userinfo["kakao_access_token"] + '}'}
+        res = requests.post(host, headers=headers)
+        jObject = json.loads(res.text)
+
+        if "error" in jObject:
+            return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 200
+
+        userinfo["userid"] = jObject["id"]
+        userinfo["usernick"] = jObject["properties"]["nickname"]
+
+        if mongodb.find_items({"userid":userinfo["userid"]}, DBName, "userinfo").count() == 0:
             mongodb.insert_item(userinfo, DBName, "userinfo")
         else:
-            mongodb.update_item({"userid":"nwkim"},{"$set" : userinfo}, DBName, "userinfo")
-        return {"status":"OK","kakao_access_token":jObject["access_token"]}, 200
+            mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "userinfo")
+        return {"status":"OK"}, 200
 
 class SmaCross(Strategy):
     n1 = 5
