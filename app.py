@@ -265,7 +265,9 @@ class GetKakaoAccessToken(Resource):
         if kakaocode=="":
             return {"status":"Fail"}, 500
 
-        host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=http://localhost:3000&code=" + kakaocode
+        redirect_uri = "https://blackas.github.io/testreactweb"
+
+        host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
         print(host)
 
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8'}
