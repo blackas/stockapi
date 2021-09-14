@@ -265,8 +265,8 @@ class GetKakaoAccessToken(Resource):
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        #redirect_uri = "https://blackas.github.io/testreactweb"
-        redirect_uri = "http://localhost:3000"
+        redirect_uri = "https://blackas.github.io/testreactweb"
+        #redirect_uri = "http://localhost:3000"
 
         host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
         print(host)
