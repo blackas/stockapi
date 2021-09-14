@@ -97,6 +97,8 @@ DBName = "stocklab"
 
 API_CERT_KEY = "f65e3d55e94386158e835f5eb20114470063ad39"
 kakao_rest_api_key = "028ea5b683384907ee2126203f9e033d"
+kakao_kauth = "https://kauth.kakao.com"
+kakao_kapi  = "https://kapi.kakao.com"
 
 class Code(Resource):
     @marshal_with(code_fields)
@@ -268,7 +270,7 @@ class GetKakaoAccessToken(Resource):
         redirect_uri = "https://blackas.github.io/testreactweb"
         #redirect_uri = "http://localhost:3000"
 
-        host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
+        host = kakao_kauth + "/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
 
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8'}
         res = requests.post(host, headers=headers)
@@ -283,7 +285,7 @@ class GetKakaoAccessToken(Resource):
         userinfo["kakao_refresh_token"] = jObject["refresh_token"]
         userinfo["kakao_refresh_token_expires_in"] = jObject["refresh_token_expires_in"]
 
-        host = "https://kapi.kakao.com/v2/user/me"
+        host = kakao_kapi + "/v2/user/me"
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8','Authorization': 'Bearer {'+userinfo["kakao_access_token"] + '}'}
         res = requests.post(host, headers=headers)
         jObject = json.loads(res.text)
