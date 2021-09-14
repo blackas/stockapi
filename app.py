@@ -269,7 +269,6 @@ class GetKakaoAccessToken(Resource):
         #redirect_uri = "http://localhost:3000"
 
         host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
-        print(host)
 
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8'}
         res = requests.post(host, headers=headers)
@@ -299,6 +298,7 @@ class GetKakaoAccessToken(Resource):
             mongodb.insert_item(userinfo, DBName, "user_info")
         else:
             mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "user_info")
+
         return {"status":"OK"}, 200
 
 class SmaCross(Strategy):
