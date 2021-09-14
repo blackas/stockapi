@@ -263,9 +263,10 @@ class GetKakaoAccessToken(Resource):
         kakaocode = request.args.get('kakaocode', default="", type=str)
 
         if kakaocode=="":
-            return {"status":"Fail"}, 500
+            return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        redirect_uri = "https://blackas.github.io/testreactweb"
+        #redirect_uri = "https://blackas.github.io/testreactweb"
+        redirect_uri = "http://localhost:3000"
 
         host = "https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
         print(host)
@@ -294,10 +295,10 @@ class GetKakaoAccessToken(Resource):
         userinfo["userid"] = jObject["id"]
         userinfo["usernick"] = jObject["properties"]["nickname"]
 
-        if mongodb.find_items({"userid":userinfo["userid"]}, DBName, "userinfo").count() == 0:
-            mongodb.insert_item(userinfo, DBName, "userinfo")
+        if mongodb.find_items({"userid":userinfo["userid"]}, DBName, "user_info").count() == 0:
+            mongodb.insert_item(userinfo, DBName, "user_info")
         else:
-            mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "userinfo")
+            mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "user_info")
         return {"status":"OK"}, 200
 
 class SmaCross(Strategy):
