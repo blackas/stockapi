@@ -5,6 +5,8 @@ from flask_restful import reqparse, abort, Api, Resource, fields, marshal_with
 from stocklab.db_handler.mongodb_handler import MongoDBHandler
 
 from datetime import datetime, timedelta
+from pytz import timezone
+
 import requests
 import json
 
@@ -165,7 +167,7 @@ class RT_DartList(Resource):
         page_count = request.args.get('page_count', default="100", type=str)
         page_no = request.args.get('page_no', default="1", type=str)
         
-        day = datetime.now().strftime("%Y%m%d")
+        day = datetime.now(timezone('Asia/Seoul')).strftime("%Y%m%d")
 
         darturl = 'https://opendart.fss.or.kr/api/list.json?crtfc_key='+API_CERT_KEY+ '&page_count='+page_count+'&page_no='+page_no +'&bgn_de=' + day
         res = requests.get(darturl)
@@ -263,6 +265,7 @@ class Check(Resource):
 class GetKakaoAccessToken(Resource):
     def get(self):
         kakaocode = request.args.get('kakaocode', default="", type=str)
+        day = datetime.now(timezone('Asia/Seoul')).strftime("%Y%m%d")
 
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
@@ -295,10 +298,14 @@ class GetKakaoAccessToken(Resource):
 
         userinfo["userid"] = jObject["id"]
         userinfo["usernick"] = jObject["properties"]["nickname"]
+        userinfo["user_state"] = "Login"
 
         if mongodb.find_items({"userid":userinfo["userid"]}, DBName, "user_info").count() == 0:
+            userinfo["reg_date"] = datetime.now(timezone('Asia/Seoul'))
+            userinfo["upd_date"] = ""
             mongodb.insert_item(userinfo, DBName, "user_info")
         else:
+            userinfo["upd_date"] = datetime.now(timezone('Asia/Seoul'))
             mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "user_info")
 
         return {"status":"OK"}, 200
