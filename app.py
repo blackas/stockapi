@@ -271,8 +271,8 @@ class GetKakaoAccessToken(Resource):
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        redirect_uri = "https://blackas.github.io/testreactweb"
-        #redirect_uri = "http://localhost:3000"
+        #redirect_uri = "https://blackas.github.io/testreactweb"
+        redirect_uri = "http://localhost:3000"
 
         host = kakao_kauth + "/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
 
@@ -297,9 +297,6 @@ class GetKakaoAccessToken(Resource):
         if "error" in jObject:
             return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 500
 
-        if "usernick" not in jObject:
-            return {"error":"101","error_description":"Authorization error : usernick not exist"}, 500
-
         userinfo["userid"] = jObject["id"]
         userinfo["usernick"] = jObject["properties"]["nickname"]
         userinfo["user_state"] = "Login"
@@ -312,7 +309,7 @@ class GetKakaoAccessToken(Resource):
             userinfo["upd_date"] = datetime.now(timezone('Asia/Seoul'))
             mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "user_info")
 
-        return {"status":"OK", "userid":userinfo["userid"], "usernick" : userinfo["usernick"]}, 200
+        return {"error":"0", "status":"OK", "userid":userinfo["userid"], "usernick" : userinfo["usernick"]}, 200
 
 class UserCheck(Resource):
     def get(self):
@@ -326,7 +323,7 @@ class UserCheck(Resource):
         if userinfo == None:
             return {"error":"201", "error_description":"User not exist"}, 500
 
-        return {"status":"OK", "usernick" : userinfo["usernick"], "user_state":userinfo["user_state"]}, 200
+        return {"error":"0", "status":"OK", "usernick" : userinfo["usernick"], "user_state":userinfo["user_state"]}, 200
 
 class UserUpdate(Resource):
     def get(self):
@@ -342,7 +339,7 @@ class UserUpdate(Resource):
         if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state}}, DBName, "user_info").modified_count == 0:
             return {"error":"212", "error_description":"No one updated"}, 500
 
-        return {"status":"OK"}, 200
+        return {"error":"0", "status":"OK"}, 200
 
 class SmaCross(Strategy):
     n1 = 5
