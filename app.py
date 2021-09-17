@@ -339,7 +339,7 @@ class UserUpdate(Resource):
         if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state}}, DBName, "user_info").modified_count == 0:
             return {"error":"212", "error_description":"No one updated"}, 500
 
-        return {"error":"0", "status":"OK"}, 200
+        return {"error":"0", "state":state}, 200
 
 class SmaCross(Strategy):
     n1 = 5
