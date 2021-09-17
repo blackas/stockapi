@@ -271,8 +271,8 @@ class GetKakaoAccessToken(Resource):
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        #redirect_uri = "https://blackas.github.io/testreactweb"
-        redirect_uri = "http://localhost:3000"
+        redirect_uri = "https://blackas.github.io/testreactweb"
+        #redirect_uri = "http://localhost:3000"
 
         host = kakao_kauth + "/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
 
@@ -299,7 +299,7 @@ class GetKakaoAccessToken(Resource):
 
         userinfo["userid"] = jObject["id"]
         userinfo["usernick"] = jObject["properties"]["nickname"]
-        userinfo["user_state"] = "Login"
+        userinfo["user_state"] = "login"
 
         if mongodb.find_items({"userid":userinfo["userid"]}, DBName, "user_info").count() == 0:
             userinfo["reg_date"] = datetime.now(timezone('Asia/Seoul'))
