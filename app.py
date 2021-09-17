@@ -241,6 +241,7 @@ class Check(Resource):
         start = '20191201'
         if len(lst_code) < 21:
             return False
+
         for code in lst_code:
             results = list(mongodb.find_items({"$and":[{'code':"005930", '날짜' : {'$gt' : start, '$lt' : end}}]}, DBName, "price_info").sort("날짜",1))
             price_info_list = []
@@ -280,7 +281,7 @@ class GetKakaoAccessToken(Resource):
         jObject = json.loads(res.text)
         
         if "error" in jObject:
-            return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 200
+            return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 500
 
         userinfo={}
         userinfo["kakao_access_token"] = jObject["access_token"]
@@ -294,7 +295,10 @@ class GetKakaoAccessToken(Resource):
         jObject = json.loads(res.text)
 
         if "error" in jObject:
-            return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 200
+            return {"error":jObject["error"],"error_code":jObject["error_code"],"error_description":jObject["error_description"]}, 500
+
+        if "usernick" not in jObject:
+            return {"error":"101","error_description":"Authorization error : usernick not exist"}, 500
 
         userinfo["userid"] = jObject["id"]
         userinfo["usernick"] = jObject["properties"]["nickname"]
@@ -307,6 +311,36 @@ class GetKakaoAccessToken(Resource):
         else:
             userinfo["upd_date"] = datetime.now(timezone('Asia/Seoul'))
             mongodb.update_item({"userid":userinfo["userid"]},{"$set" : userinfo}, DBName, "user_info")
+
+        return {"status":"OK", "userid":userinfo["userid"], "usernick" : userinfo["usernick"]}, 200
+
+class UserCheck(Resource):
+    def get(self):
+        userid = request.args.get('userid', default="", type=int)
+
+        if userid == "":
+            return {"error":"200", "error_description":"Parameter Error : userid not exist"}, 500
+
+        userinfo = mongodb.find_item({"userid":userid}, DBName, "user_info")
+
+        if userinfo == None:
+            return {"error":"201", "error_description":"User not exist"}, 500
+
+        return {"status":"OK", "usernick" : userinfo["usernick"], "user_state":userinfo["user_state"]}, 200
+
+class UserUpdate(Resource):
+    def get(self):
+        userid = request.args.get('userid', default=0,  type=int)
+        state  = request.args.get('state',  default="", type=str)
+
+        if userid == 0:
+            return {"error":"210", "error_description":"Parameter Error : userid not exist"}, 500
+
+        if state == "":
+            return {"error":"211", "error_description":"Parameter Error : state not exist"}, 500
+
+        if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state}}, DBName, "user_info").modified_count == 0:
+            return {"error":"212", "error_description":"No one updated"}, 500
 
         return {"status":"OK"}, 200
 
@@ -333,6 +367,8 @@ api.add_resource(DartList, "/dart", endpoint="dart")
 api.add_resource(StrategyList, "/strategy", endpoint="strategy")
 api.add_resource(Check, "/check", endpoint="check")
 api.add_resource(GetKakaoAccessToken, "/GetKakaoAccessToken", endpoint="GetKakaoAccessToken")
+api.add_resource(UserCheck, "/usercheck", endpoint="usercheck")
+api.add_resource(UserUpdate, "/userupdate", endpoint="userupdate")
 
 if __name__ == '__main__':
     app.run(debug=True)
