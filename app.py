@@ -336,10 +336,30 @@ class UserUpdate(Resource):
         if state == "":
             return {"error":"211", "error_description":"Parameter Error : state not exist"}, 500
 
-        if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state}}, DBName, "user_info").modified_count == 0:
+        if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state,}}, DBName, "user_info").modified_count == 0:
             return {"error":"212", "error_description":"No one updated"}, 500
 
         return {"error":"0", "state":state}, 200
+
+class AddKakaoDart(Resource):
+    def get(self):
+        userid = request.args.get('userid', default=0,  type=int)
+        code   = request.args.get('code',   default="", type=str)
+
+        if userid == 0:
+            return {"error":"210", "error_description":"Parameter Error : userid not exist"}, 500
+
+        if code == "":
+            return {"error":"211", "error_description":"Parameter Error : state not exist"}, 500
+
+        info = {"userid" : userid, "stock_code" : code, "regdate" : datetime.now(timezone('Asia/Seoul')), "upddate" : ""}
+
+        if mongodb.find_items({"userid":userid, "stock_code":code}, DBName, "dart_kakao").count() == 0:
+            mongodb.insert_item(info, DBName, "dart_kakao")
+        else:
+            return {"error":"220", "error_description":"이미 추가된 종목입니다."}, 500
+
+        return {"error":"0"}, 200
 
 class SmaCross(Strategy):
     n1 = 5
@@ -366,6 +386,7 @@ api.add_resource(Check, "/check", endpoint="check")
 api.add_resource(GetKakaoAccessToken, "/GetKakaoAccessToken", endpoint="GetKakaoAccessToken")
 api.add_resource(UserCheck, "/usercheck", endpoint="usercheck")
 api.add_resource(UserUpdate, "/userupdate", endpoint="userupdate")
+api.add_resource(AddKakaoDart, "/addkakaodart", endpoint="addkakaodart")
 
 if __name__ == '__main__':
     app.run(debug=True)
