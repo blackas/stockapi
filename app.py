@@ -187,12 +187,12 @@ class DartList(Resource):
         corpcls = request.args.get('corpcls', default="all", type=str)
         code = request.args.get('code', default="all", type=str)
         if corpcls == 'all' and code == 'all':
-            result_list = list(mongodb.find_items({}, DBName, "dart_publication"))
+            result_list = list(mongodb.find_items({}, DBName, "dart_publication").sort("rcept_dt",1))
         elif corpcls in ["Y", "K", "N", "E"]:
             if code == 'all':
-                result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication"))
+                result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication").sort("rcept_dt",1))
             else:
-                result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication"))
+                result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication").sort("rcept_dt",1))
         else:
             return {"error:잘못 된 요청입니다."}, 404
         return { "count": len(result_list), "dart_list": result_list }, 200
