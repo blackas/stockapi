@@ -199,10 +199,6 @@ class DartList(Resource):
             result_list = list(mongodb.find_items({}, DBName, "dart_publication").sort("rcept_dt",-1))
         elif corpcls in ["Y", "K", "N", "E"]:
             if code == 'all':
-<<<<<<< HEAD
-=======
-                #result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication").sort([("rcept_dt", pymongo.DESCENDING), ("rcept_no", pymongo.DESCENDING)]))
->>>>>>> 1759877c092f8d8b2c512874dee7c267403cdcff
                 result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication").sort("rcept_dt",-1))
             else:
                 result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication").sort("rcept_dt",-1))
