@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, render_template, make_response
+from flask import Flask, request, render_template, make_response, send_file
 from flask_cors import CORS
 from flask_restful import reqparse, abort, Api, Resource, fields, marshal_with
 from stocklab.db_handler.mongodb_handler import MongoDBHandler
@@ -7,16 +7,23 @@ from stocklab.db_handler.mongodb_handler import MongoDBHandler
 from datetime import datetime, timedelta
 from pytz import timezone
 
+import io
 import requests
 import json
 
 #주가 전략 테스트 관련 라이브러리
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+
 from pandas import Series, DataFrame
 import pandas as pd
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 from backtesting.test import SMA
+
+from sklearn.cluster import KMeans
+from matplotlib import style
 
 app = Flask(__name__)
 CORS(app)
@@ -51,7 +58,7 @@ price_hname_to_eng = {
     "저가": "low",
     "전일대비": "diff",
     "전일대비구분": "diff_type",
-    "누적거래량":"volume_usd"
+    "누적거래량":"volume"
 }
 
 code_fields = {
@@ -76,7 +83,7 @@ code_list_fields = {
 }
 
 price_fields = {
-    "date": fields.Integer,
+    "date": fields.String,
     "start": fields.Integer,
     "close": fields.Integer,
     "open": fields.Integer,
@@ -146,7 +153,9 @@ class Price(Resource):
 
         for item in results:
             price_info = { price_hname_to_eng[field]: item[field] for field in item.keys() if field in price_hname_to_eng } 
+            price_info["date"] = str(datetime.strptime(price_info["date"], '%Y%m%d'))
             price_info_list.append(price_info)
+
         result_object["price_list"] = price_info_list
         result_object["count"] = len(price_info_list)
         return result_object, 200
@@ -187,18 +196,17 @@ class DartList(Resource):
         corpcls = request.args.get('corpcls', default="all", type=str)
         code = request.args.get('code', default="all", type=str)
         if corpcls == 'all' and code == 'all':
-            result_list = list(mongodb.find_items({}, DBName, "dart_publication"))
+            result_list = list(mongodb.find_items({}, DBName, "dart_publication").sort("rcept_dt",-1))
         elif corpcls in ["Y", "K", "N", "E"]:
             if code == 'all':
-                result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication"))
+                result_list = list(mongodb.find_items({"corp_cls":corpcls}, DBName, "dart_publication").sort("rcept_dt",-1))
             else:
-                result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication"))
+                result_list = list(mongodb.find_items({"stock_code":code}, DBName, "dart_publication").sort("rcept_dt",-1))
         else:
             return {"error:잘못 된 요청입니다."}, 404
         return { "count": len(result_list), "dart_list": result_list }, 200
 
 class StrategyList(Resource):
-
     def get(self):
         filepath = datetime.now().strftime("%Y%m%d%H%M%S") + ".html"
         code = request.args.get('code', default="all", type=str)
@@ -327,8 +335,8 @@ class UserCheck(Resource):
 
 class UserUpdate(Resource):
     def get(self):
-        userid = request.args.get('userid', default=0,  type=int)
-        state  = request.args.get('state',  default="", type=str)
+        userid = request.args.get('userid',     default=0,  type=int)
+        state  = request.args.get('user_state', default="", type=str)
 
         if userid == 0:
             return {"error":"210", "error_description":"Parameter Error : userid not exist"}, 500
@@ -339,7 +347,7 @@ class UserUpdate(Resource):
         if mongodb.update_item({"userid":userid},{"$set": { "user_state" : state,}}, DBName, "user_info").modified_count == 0:
             return {"error":"212", "error_description":"No one updated"}, 500
 
-        return {"error":"0", "state":state}, 200
+        return {"error":"0", "user_state":state}, 200
 
 class AddKakaoDart(Resource):
     def get(self):
@@ -375,6 +383,78 @@ class SmaCross(Strategy):
         elif crossover(self.sma2, self.sma1):
             self.sell()
 
+def get_optimum_clusters(data, saturation_point=0.05):
+
+    wcss = []
+    k_models = []
+
+    size = 11
+    for i in range(1, size):
+        kmeans = KMeans(n_clusters=i)
+        kmeans.fit(data)
+        wcss.append(kmeans.inertia_)
+        k_models.append(kmeans)
+
+    return k_models
+
+class GetKmeans(Resource):
+    def get(self):
+        style.use('ggplot')
+
+        code = request.args.get('code', default="", type=str)
+
+        if code == "":
+            return {"error":"211", "error_description":"Parameter Error : state not exist"}, 500
+
+        today = datetime.now().strftime("%Y%m%d")
+        default_start_date = datetime.now() - timedelta(days=30)
+        start_date = request.args.get('start_date', default=default_start_date.strftime("%Y%m%d"), type=str)
+        end_date = request.args.get('end_date', default=today, type=str)
+
+        results = list(mongodb.find_items({"code":code}, DBName, "price_info").sort("날짜",1))
+        Low = []
+        High = []
+        Close = []
+
+        fig = Figure()
+
+        for result in results:
+            Low.append(int(result['저가']))
+            High.append(int(result['고가']))
+            Close.append(int(result['종가']))
+
+        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close})
+        print(data)
+
+        low = pd.DataFrame(data=data['Low'], index=data.index)
+        high = pd.DataFrame(data=data['High'], index=data.index)
+
+        # index 3 as 4 is the value of K (elbow point)
+        low_clusters = get_optimum_clusters(low)[3]
+        high_clusters = get_optimum_clusters(high)[3]
+
+        low_centers = low_clusters.cluster_centers_
+        high_centers = high_clusters.cluster_centers_
+
+        data['Close'].plot(figsize=(16,8), c='b')
+        for i in low_centers:
+            plt.axhline(i, c='g', ls='--')
+        for i in high_centers:
+            plt.axhline(i, c='r', ls='--')
+
+        canvas = FigureCanvas(plt)
+        output = StringIO.StringIO()
+        canvas.print_png(output)
+        response = make_response(output.getvalue())
+        response.mimetype = 'image/png'
+        return response
+
+        #bytes_image = io.BytesIO()
+        #plt.savefig(bytes_image, format='png')
+        #bytes_obj = bytes_image.seek(0)
+
+        #return send_file(bytes_obj, attachment_filename='plot.png', mimetype='image/png'), 200
+
 api.add_resource(CodeList, "/codes", endpoint="codes")
 api.add_resource(Code, "/codes/<string:code>", endpoint="code")
 api.add_resource(Price, "/codes/<string:code>/sortflag/<string:sortflag>/price", endpoint="price")
@@ -387,6 +467,7 @@ api.add_resource(GetKakaoAccessToken, "/GetKakaoAccessToken", endpoint="GetKakao
 api.add_resource(UserCheck, "/usercheck", endpoint="usercheck")
 api.add_resource(UserUpdate, "/userupdate", endpoint="userupdate")
 api.add_resource(AddKakaoDart, "/addkakaodart", endpoint="addkakaodart")
+api.add_resource(GetKmeans, "/plot.png", endpoint="plot.png")
 
 if __name__ == '__main__':
     app.run(debug=True)
