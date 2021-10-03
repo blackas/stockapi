@@ -91,7 +91,7 @@ price_fields = {
     "low": fields.Integer,
     "diff": fields.Float,
     "diff_type": fields.Integer,
-    "volume_usd": fields.Integer
+    "volume": fields.Integer
 }
 
 price_list_fields = {
