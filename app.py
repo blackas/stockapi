@@ -10,11 +10,16 @@ from pytz import timezone
 import io
 import requests
 import json
+from io import BytesIO, StringIO
 
 #주가 전략 테스트 관련 라이브러리
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from sklearn.cluster import KMeans
+from matplotlib import style
 
 from pandas import Series, DataFrame
 import pandas as pd
@@ -22,8 +27,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 from backtesting.test import SMA
 
-from sklearn.cluster import KMeans
-from matplotlib import style
 
 app = Flask(__name__)
 CORS(app)
@@ -97,6 +100,9 @@ price_fields = {
 price_list_fields = {
     "count": fields.Integer,
     "price_list": fields.List(fields.Nested(price_fields)),
+    "support": fields.List(fields.Integer),
+    "resistance": fields.List(fields.Integer),
+    "code" : fields.String,
  }
 
 
@@ -151,13 +157,39 @@ class Price(Resource):
         result_object = {}
         price_info_list = []
 
+        Low = []
+        High = []
+        Close = []
+        Open = []
+
         for item in results:
             price_info = { price_hname_to_eng[field]: item[field] for field in item.keys() if field in price_hname_to_eng } 
             price_info["date"] = str(datetime.strptime(price_info["date"], '%Y%m%d'))
             price_info_list.append(price_info)
+            Low.append(int(item['저가']))
+            High.append(int(item['고가']))
+            Close.append(int(item['종가']))
+            Open.append(int(item['시가']))
 
         result_object["price_list"] = price_info_list
         result_object["count"] = len(price_info_list)
+        result_object["code"] = code
+
+        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close, 'Open': Open})
+
+        low = pd.DataFrame(data=data['Low'], index=data.index)
+        high = pd.DataFrame(data=data['High'], index=data.index)
+
+        # index 3 as 4 is the value of K (elbow point)
+        low_clusters = get_optimum_clusters(low)[3]
+        high_clusters = get_optimum_clusters(high)[3]
+
+        low_centers = low_clusters.cluster_centers_
+        high_centers = high_clusters.cluster_centers_
+
+        result_object["support"] = low_centers.astype(int)
+        result_object["resistance"] = high_centers.astype(int)
+
         return result_object, 200
 
 class OrderList(Resource):
@@ -415,16 +447,15 @@ class GetKmeans(Resource):
         Low = []
         High = []
         Close = []
-
-        fig = Figure()
+        Open = []
 
         for result in results:
             Low.append(int(result['저가']))
             High.append(int(result['고가']))
             Close.append(int(result['종가']))
+            Open.append(int(result['시가']))
 
-        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close})
-        print(data)
+        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close, 'Open': Open})
 
         low = pd.DataFrame(data=data['Low'], index=data.index)
         high = pd.DataFrame(data=data['High'], index=data.index)
@@ -436,24 +467,22 @@ class GetKmeans(Resource):
         low_centers = low_clusters.cluster_centers_
         high_centers = high_clusters.cluster_centers_
 
+        fig = Figure()
+        axis = fig.add_subplot(1, 1, 1)
+
         data['Close'].plot(figsize=(16,8), c='b')
+        axis.plot(figsize=(16,8), c='b')
+        axis.plot(data['Close'])
         for i in low_centers:
             plt.axhline(i, c='g', ls='--')
         for i in high_centers:
             plt.axhline(i, c='r', ls='--')
 
-        canvas = FigureCanvas(plt)
-        output = StringIO.StringIO()
-        canvas.print_png(output)
-        response = make_response(output.getvalue())
-        response.mimetype = 'image/png'
-        return response
+        img = BytesIO()
+        plt.savefig(img, format='png', dpi=200)
+        img.seek(0)
 
-        #bytes_image = io.BytesIO()
-        #plt.savefig(bytes_image, format='png')
-        #bytes_obj = bytes_image.seek(0)
-
-        #return send_file(bytes_obj, attachment_filename='plot.png', mimetype='image/png'), 200
+        return send_file(img, mimetype='image/png')
 
 api.add_resource(CodeList, "/codes", endpoint="codes")
 api.add_resource(Code, "/codes/<string:code>", endpoint="code")
@@ -467,7 +496,7 @@ api.add_resource(GetKakaoAccessToken, "/GetKakaoAccessToken", endpoint="GetKakao
 api.add_resource(UserCheck, "/usercheck", endpoint="usercheck")
 api.add_resource(UserUpdate, "/userupdate", endpoint="userupdate")
 api.add_resource(AddKakaoDart, "/addkakaodart", endpoint="addkakaodart")
-api.add_resource(GetKmeans, "/plot.png", endpoint="plot.png")
+api.add_resource(GetKmeans, "/plot", endpoint="plot")
 
 if __name__ == '__main__':
     app.run(debug=True)
