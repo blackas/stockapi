@@ -10,7 +10,10 @@ from pytz import timezone
 import io
 import requests
 import json
+import xmltodict
 from io import BytesIO, StringIO
+
+import yfinance as yf
 
 #주가 전략 테스트 관련 라이브러리
 import matplotlib
@@ -27,6 +30,7 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 from backtesting.test import SMA
 
+import DataEngineer.mathfunction as de
 
 app = Flask(__name__)
 CORS(app)
@@ -103,6 +107,7 @@ price_list_fields = {
     "support": fields.List(fields.Integer),
     "resistance": fields.List(fields.Integer),
     "code" : fields.String,
+    "increase_volume" : fields.List(fields.String),
  }
 
 
@@ -114,7 +119,9 @@ API_CERT_KEY = "f65e3d55e94386158e835f5eb20114470063ad39"
 kakao_rest_api_key = "028ea5b683384907ee2126203f9e033d"
 kakao_kauth = "https://kauth.kakao.com"
 kakao_kapi  = "https://kapi.kakao.com"
-
+SEIBRO_SEARCH_WORD_API_KEY = "fjGWMMABZnp7n8Wg67jbCDcry6FAX4qXzjLFhZ4r37WEoOjnrlrnDogxE7HPexyDmcJveyyy7/75nue9VbpL/w=="
+## 주식 코드 정보
+## input : code (required)
 class Code(Resource):
     @marshal_with(code_fields)
     def get(self, code):
@@ -126,6 +133,7 @@ class Code(Resource):
                         for field in result.keys() if field in code_hname_to_eng }
         return code_info
 
+## 전체 주식 코드 정보
 class CodeList(Resource):
     @marshal_with(code_list_fields)
     def get(self):
@@ -141,6 +149,7 @@ class CodeList(Resource):
             result_list.append(code_info)
         return {"code_list" : result_list, "count": len(result_list)}, 200
 
+## 주식 가격
 class Price(Resource):
     @marshal_with(price_list_fields)
     def get(self, code, sortflag):
@@ -161,6 +170,8 @@ class Price(Resource):
         High = []
         Close = []
         Open = []
+        Volume = []
+        Date = []
 
         for item in results:
             price_info = { price_hname_to_eng[field]: item[field] for field in item.keys() if field in price_hname_to_eng } 
@@ -170,12 +181,14 @@ class Price(Resource):
             High.append(int(item['고가']))
             Close.append(int(item['종가']))
             Open.append(int(item['시가']))
+            Volume.append(int(item['누적거래량']))
+            Date.append(str(datetime.strptime(item["날짜"], '%Y%m%d')).split(" ")[0])
 
         result_object["price_list"] = price_info_list
         result_object["count"] = len(price_info_list)
         result_object["code"] = code
 
-        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close, 'Open': Open})
+        data = pd.DataFrame({'Low': Low,'High': High,'Close': Close, 'Open': Open, 'Volume':Volume, 'Date':Date})
 
         low = pd.DataFrame(data=data['Low'], index=data.index)
         high = pd.DataFrame(data=data['High'], index=data.index)
@@ -190,8 +203,14 @@ class Price(Resource):
         result_object["support"] = low_centers.astype(int)
         result_object["resistance"] = high_centers.astype(int)
 
+        #이상치 거래량 상승 데이터
+        out_up = de.outlier_iqr(data, "Volume", "up")
+        result_object["increase_volume"] = out_up['Date'].values.tolist()
+
         return result_object, 200
 
+## 사용하지 않음..
+'''
 class OrderList(Resource):
     def get(self):
         status = request.args.get('status', default="all", type=str)
@@ -202,7 +221,9 @@ class OrderList(Resource):
         else:
             return {}, 404
         return { "count": len(result_list), "order_list": result_list }, 200
+'''
 
+## 실시간 공시
 class RT_DartList(Resource):
     def get(self):
         page_count = request.args.get('page_count', default="100", type=str)
@@ -222,7 +243,7 @@ class RT_DartList(Resource):
         else:
             return { "errcode": 100, "errmsg": "금일 조회 된 공시결과가 없습니다." }, 200
 
-
+## 특정 종목 공시
 class DartList(Resource):
     def get(self):
         corpcls = request.args.get('corpcls', default="all", type=str)
@@ -238,6 +259,7 @@ class DartList(Resource):
             return {"error:잘못 된 요청입니다."}, 404
         return { "count": len(result_list), "dart_list": result_list }, 200
 
+## 임시로 만든 주가 전략 api
 class StrategyList(Resource):
     def get(self):
         filepath = datetime.now().strftime("%Y%m%d%H%M%S") + ".html"
@@ -250,11 +272,8 @@ class StrategyList(Resource):
         price_info_list = []
 
         for item in pricelist:
-            print(item)
             price_info = { price_hname_to_eng_st[field]: item[field] for field in item.keys() if field in price_hname_to_eng_st }
             price_info_list.append(price_info)
-
-        print("컬럼명 변경 완료")
 
         df = DataFrame(price_info_list)
         df_int = df.apply(pd.to_numeric)
@@ -271,6 +290,7 @@ class StrategyList(Resource):
         line = f.read()
         return { "html": line }, 200
 
+## 테스트용..
 class Check(Resource):
     def get(self):
         lst_code = list(mongodb.find_items({}, DBName, "code_info"))
@@ -299,10 +319,10 @@ class Check(Resource):
             volumn = df_price['close'].rolling(window=20).mean()
             df_price.insert(len(df_price.columns), "MA5", ma5)
             df_price.insert(len(df_price.columns), "MA20", ma20)
-            print(df_price)
             break
         return {"status":"OK"}, 200
 
+## 카카오 로그시 필요한 엑세스 토큰 발급
 class GetKakaoAccessToken(Resource):
     def get(self):
         kakaocode = request.args.get('kakaocode', default="", type=str)
@@ -311,8 +331,8 @@ class GetKakaoAccessToken(Resource):
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        redirect_uri = "https://blackas.github.io/testreactweb"
-        #redirect_uri = "http://localhost:3000"
+        #redirect_uri = "https://blackas.github.io/testreactweb"
+        redirect_uri = "http://localhost:3000"
 
         host = kakao_kauth + "/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
 
@@ -351,6 +371,7 @@ class GetKakaoAccessToken(Resource):
 
         return {"error":"0", "status":"OK", "userid":userinfo["userid"], "usernick" : userinfo["usernick"]}, 200
 
+## 로그인 유저 정보
 class UserCheck(Resource):
     def get(self):
         userid = request.args.get('userid', default="", type=int)
@@ -365,6 +386,7 @@ class UserCheck(Resource):
 
         return {"error":"0", "status":"OK", "usernick" : userinfo["usernick"], "user_state":userinfo["user_state"]}, 200
 
+## 유저 상태 업데이트
 class UserUpdate(Resource):
     def get(self):
         userid = request.args.get('userid',     default=0,  type=int)
@@ -381,6 +403,7 @@ class UserUpdate(Resource):
 
         return {"error":"0", "user_state":state}, 200
 
+## 카카오톡 수신 종목 공시 추가
 class AddKakaoDart(Resource):
     def get(self):
         userid = request.args.get('userid', default=0,  type=int)
@@ -401,6 +424,7 @@ class AddKakaoDart(Resource):
 
         return {"error":"0"}, 200
 
+## 
 class SmaCross(Strategy):
     n1 = 5
     n2 = 20
@@ -484,10 +508,41 @@ class GetKmeans(Resource):
 
         return send_file(img, mimetype='image/png')
 
+'''
+class SearchWord(Resource):
+    def get(self):
+        term   = request.args.get('term',   default="", type=str)
+        #userid = request.args.get('userid', default="", type=str)
+        pageNo = request.args.get('pageNo', default=1, type=int)
+
+        totalcnt = 0
+
+        if term == "":
+            return {"error":"300", "error_description":"Parameter Error : Need search term"}, 500
+
+        #if userid == "":
+        #    return {"error":"301", "error_description":"Parameter Error : state not exist"}, 500
+
+        seibrourl = 'http://api.seibro.or.kr/openapi/service/FnTermSvc/getFinancialTermMeaning?ServiceKey=' + SEIBRO_SEARCH_WORD_API_KEY + '&numOfRows=5&pageNo=' + str(pageNo) + '&term=' + term
+        res = requests.get(seibrourl)
+        dic_res = xmltodict.parse(res.text) # return collections.OrderedDict
+        json_res = json.loads(json.dumps(dic_res)) # return dict
+        resultCode = json_res["response"]["header"]["resultCode"]
+        
+        if resultCode == "00":
+            totalcnt = json_res["response"]["body"]["totalCount"]
+            return { "error" : "0", "totalcnt" : totalcnt, "result" : json_res["response"]["body"]["items"] }, 200
+        else:
+            return { "error":"302", "error_description" : json_res["response"]["header"]["resultMsg"], "error_code" : resultCode}
+
+        #else:
+        #   return { "errcode": 100, "errmsg": "금일 조회 된 공시결과가 없습니다." }, 200
+'''
+
 api.add_resource(CodeList, "/codes", endpoint="codes")
 api.add_resource(Code, "/codes/<string:code>", endpoint="code")
 api.add_resource(Price, "/codes/<string:code>/sortflag/<string:sortflag>/price", endpoint="price")
-api.add_resource(OrderList, "/orders", endpoint="orders")
+#api.add_resource(OrderList, "/orders", endpoint="orders")
 api.add_resource(RT_DartList, "/rt_dartlist", endpoint="rt_dartlist")
 api.add_resource(DartList, "/dart", endpoint="dart")
 api.add_resource(StrategyList, "/strategy", endpoint="strategy")
@@ -497,6 +552,7 @@ api.add_resource(UserCheck, "/usercheck", endpoint="usercheck")
 api.add_resource(UserUpdate, "/userupdate", endpoint="userupdate")
 api.add_resource(AddKakaoDart, "/addkakaodart", endpoint="addkakaodart")
 api.add_resource(GetKmeans, "/plot", endpoint="plot")
+#api.add_resource(SearchWord, "/searchword", endpoint="searchword")
 
 if __name__ == '__main__':
     app.run(debug=True)
