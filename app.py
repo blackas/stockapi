@@ -204,7 +204,7 @@ class Price(Resource):
         result_object["resistance"] = high_centers.astype(int)
 
         #이상치 거래량 상승 데이터
-        out_up = de.outlier_iqr(data, "Volume", "up")
+        out_up = de.outlier_iqr(data, "Volume", "up", 0.1, 0.9, 1.5)
         result_object["increase_volume"] = out_up['Date'].values.tolist()
 
         return result_object, 200
@@ -326,16 +326,17 @@ class Check(Resource):
 class GetKakaoAccessToken(Resource):
     def get(self):
         kakaocode = request.args.get('kakaocode', default="", type=str)
+        mode = request.args.get('mode', default="", type=str)
         day = datetime.now(timezone('Asia/Seoul')).strftime("%Y%m%d")
 
         if kakaocode=="":
             return {"error":"100","error_description":"parameter error : kakaocode not exist"}, 500
 
-        #redirect_uri = "https://blackas.github.io/testreactweb"
-        redirect_uri = "http://localhost:3000"
+        #redirect_uri = "http://localhost:3000/OAuth"
+        redirect_uri = "https://blackas.github.io/testreactweb/OAuth"
 
         host = kakao_kauth + "/oauth/token?grant_type=authorization_code&client_id=" + kakao_rest_api_key + "&redirect_uri=" + redirect_uri + "&code=" + kakaocode
-
+        print(host)
         headers = {'Content-type': 'application/x-www-form-urlencoded;charset=utf-8'}
         res = requests.post(host, headers=headers)
         jObject = json.loads(res.text)
